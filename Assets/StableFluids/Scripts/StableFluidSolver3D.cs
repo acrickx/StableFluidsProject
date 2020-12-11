@@ -6,10 +6,10 @@ public class StableFluidSolver3D : MonoBehaviour
 {
     enum BCType
     {
-        type1,
-        type2,
-        type3,
-        type0
+        vertical,
+        horizontal,
+        depth,
+        pressure
     }
 
     //SIMULATION PARAMETERS
@@ -17,7 +17,7 @@ public class StableFluidSolver3D : MonoBehaviour
     bool StartSimulation = false;
     //renderer
     [SerializeField]
-    SimpleRenderer renderer;
+    FluidRenderer renderer;
 
     GameObject debugVelocity;
 
@@ -76,15 +76,15 @@ public class StableFluidSolver3D : MonoBehaviour
 
     void Vstep()
     {
-        diffuse(velXPrev, velX, viscosity, dt); setBoundaryConditions(BCType.type1, velX);
-        diffuse(velYPrev, velY, viscosity, dt); setBoundaryConditions(BCType.type2, velY);
-        diffuse(velZPrev, velZ, viscosity, dt); setBoundaryConditions(BCType.type2, velZ);
+        diffuse(velXPrev, velX, viscosity, dt); setBoundaryConditions(BCType.vertical, velX);
+        diffuse(velYPrev, velY, viscosity, dt); setBoundaryConditions(BCType.horizontal, velY);
+        diffuse(velZPrev, velZ, viscosity, dt); setBoundaryConditions(BCType.horizontal, velZ);
         //projection step
         project(velXPrev, velYPrev,velZPrev, velX, velY);
         //Advection step
-        transport(velX, velXPrev, velXPrev, velYPrev, velZPrev); setBoundaryConditions(BCType.type1, velX);
-        transport(velY, velYPrev, velXPrev, velYPrev, velZPrev); setBoundaryConditions(BCType.type2, velY);
-        transport(velZ, velZPrev, velXPrev, velYPrev, velZPrev); setBoundaryConditions(BCType.type2, velZ);
+        transport(velX, velXPrev, velXPrev, velYPrev, velZPrev); setBoundaryConditions(BCType.vertical, velX);
+        transport(velY, velYPrev, velXPrev, velYPrev, velZPrev); setBoundaryConditions(BCType.horizontal, velY);
+        transport(velZ, velZPrev, velXPrev, velYPrev, velZPrev); setBoundaryConditions(BCType.horizontal, velZ);
         //projection step -> solving Poisson equation
         project(velX, velY,velZPrev, velXPrev, velYPrev);
     }
@@ -94,7 +94,7 @@ public class StableFluidSolver3D : MonoBehaviour
         //diffusion step
         diffuse(densPrev, dens, diffusionRate, dt);
         //advection step
-        transport(dens, densPrev, velX, velY, velZ); setBoundaryConditions(BCType.type0, dens);
+        transport(dens, densPrev, velX, velY, velZ); setBoundaryConditions(BCType.pressure, dens);
         //dissipation step
         dissipate(dens);
     }
@@ -114,10 +114,6 @@ public class StableFluidSolver3D : MonoBehaviour
         }
         mouseSpeed = new Vector2(Input.mousePosition.x, Input.mousePosition.y) - lastMousePoint;
         lastMousePoint = Input.mousePosition;
-        if (Input.GetKeyDown(KeyCode.D))
-        {
-            debugDens();
-        }
     }
 
     #endregion
@@ -128,8 +124,8 @@ public class StableFluidSolver3D : MonoBehaviour
 
     void diffuse(float[,,] x, float[,,] x0, float diff, float dt)
     {
-        float a = dt * diff * (N-2) * (N-2);
-        GaussSeidelRelaxLinearSolver(x, x0, a, 1 + 6 * a);
+        float diffusionRate = dt * diff * N * N;
+        NumericalMethods.GaussSeidelRelaxLinearSolver3D(x, x0, diffusionRate, 1 + 6 * diffusionRate, N);
     }
 
     void project(float[,,] Ux, float[,,] Uy, float[,,] Uz, float[,,] pressure, float[,,] nDiv)
@@ -142,16 +138,16 @@ public class StableFluidSolver3D : MonoBehaviour
                 for (int i = 1; i < N - 1; i++)
                 {
                     //computing negative divergence which will be the right hand of the equation for pressure linear system
-                    nDiv[i, j,k] = -discreteVelocityDivergence(Ux, Uy, Uz, i, j,k);
+                    nDiv[i, j,k] = -NumericalMethods.discreteVelocityDivergence3D(Ux, Uy, Uz, i, j,k, N);
                     pressure[i, j,k] = 0;
                 }
             }
 
         }
         //reset bondary conditions since we made changes in the grid
-        setBoundaryConditions(BCType.type0, nDiv); setBoundaryConditions(BCType.type0, pressure);
+        setBoundaryConditions(BCType.pressure, nDiv); setBoundaryConditions(BCType.pressure, pressure);
         //solve Poisson equation using GaussianSeidel solver
-        GaussSeidelRelaxLinearSolver(pressure, nDiv, 1, 6);
+        NumericalMethods.GaussSeidelRelaxLinearSolver3D(pressure, nDiv, 1, 6, N);
         //Hodge decomposition : any field = mass conserving + gradient
         //we want ONLY the mass conserving part (= initial field - gradient)
         for (int k = 1; k < N - 1; k++)
@@ -160,15 +156,15 @@ public class StableFluidSolver3D : MonoBehaviour
             {
                 for (int i = 1; i < N - 1; i++)
                 {
-                    Ux[i, j,k] -= centralDifferences(pressure, i, j,k, 0, (1 / (float)N));
-                    Uy[i, j,k] -= centralDifferences(pressure, i, j,k, 1, (1 / (float)N));
-                    Uz[i, j,k] -= centralDifferences(pressure, i, j,k, 2, (1 / (float)N));
+                    Ux[i, j, k] -= NumericalMethods.centralDifferences3D(pressure, i, j,k, 1, (1 / (float)N));
+                    Uy[i, j,k] -= NumericalMethods.centralDifferences3D(pressure, i, j,k, 0, (1 / (float)N));
+                    Uz[i, j,k] -= NumericalMethods.centralDifferences3D(pressure, i, j,k, 2, (1 / (float)N));
                 }
             }
         }
-        setBoundaryConditions(BCType.type1, Ux);
-        setBoundaryConditions(BCType.type2, Uy);
-        setBoundaryConditions(BCType.type2, Uz);
+        setBoundaryConditions(BCType.vertical, Ux);
+        setBoundaryConditions(BCType.horizontal, Uy);
+        setBoundaryConditions(BCType.horizontal, Uz);
     }
 
     void transport(float[,,] s, float[,,] s0, float[,,] Ux, float[,,] Uy, float[,,] Uz)
@@ -179,43 +175,16 @@ public class StableFluidSolver3D : MonoBehaviour
             {
                 for (int j = 1; j < N - 1; j++)
                 {
-                    Vector3 prevParticlePos = TraceParticle(i, j,k, Ux, Uy, Uz);
-                    //get the 4 neighbours cells around position (x,y)
-                    int x0 = Mathf.Clamp(Mathf.FloorToInt(prevParticlePos.x), 1, N - 2);
-                    int x1 = Mathf.Clamp(x0 + 1, 0, N - 1);
-                    int y0 = Mathf.Clamp(Mathf.FloorToInt(prevParticlePos.y), 1, N - 2);
-                    int y1 = Mathf.Clamp(y0 + 1, 0, N - 1);
-                    int z0 = Mathf.Clamp(Mathf.FloorToInt(prevParticlePos.z), 1, N - 2);
-                    int z1 = Mathf.Clamp(z0 + 1, 0, N - 1);
-                    //get the deltas between x/x0 and y/y0 to weight the linear combination for the density
-                    float wx1 = prevParticlePos.x - x0;
-                    float wx0 = 1 - wx1;
-                    float wy1 = prevParticlePos.y - y0;
-                    float wy0 = 1 - wy1;
-                    float wz1 = prevParticlePos.z - z0;
-                    float wz0 = 1 - wz1;
-                    //set back the interpolated value based on these 4 cells back at the initial grid cell (i,j)                
-                    s[i, j, k] = wx0 * (wy0 * (wz0 * s0[x0, y0, z0] + wz1 * (s0[x0, y0, z1])) + wy1 * (wz0 * s0[x0, y1, z0] + wz1 * (s0[x0, y1, z1])))
-                               + wx1 * (wy0 * (wz0 * s0[x1, y0, z0] + wz1 * (s0[x1, y0, z1])) + wy1 * (wz0 * s0[x1, y1, z0] + wz1 * (s0[x1, y1, z1])));                              
+                    Vector3 prevParticlePos = NumericalMethods.TraceParticle3D(i, j,k, Ux, Uy, Uz,dt,N);
+                    //get the 6 neighbours cells around position (x,y)
+                    //set back the interpolated value based on these 6 cells back at the initial grid cell (i,j,k)      
+                    s[i, j, k] = NumericalMethods.trilinearInterpolation(s0, prevParticlePos, N);
+                     
                 }
             }
         }
     }
 
-    //trace particle back to previous position
-    Vector3 TraceParticle(int i, int j, int k, float[,,] Ux, float[,,] Uy, float[,,] Uz)
-    {
-        //tracing the particle backwards in time 
-        float a = (i - (dt * N) * Ux[i, j,k]); //new vertical position from center of cell
-        float b = (j - (dt * N) * Uy[i, j,k]); //new horizontal position
-        float c = (k - (dt * N) * Uz[i, j,k]); //new depth position
-        // make sure the position of the particle is inside the grid; if not set it at the limit
-        a = Mathf.Clamp(a, 0.99f, N - 0.01f);
-        b = Mathf.Clamp(b, 0.99f, N - 0.01f);
-        c = Mathf.Clamp(c, 0.99f, N - 0.01f);
-        // return traced position
-        return new Vector3(a, b, c);
-    }
 
     void setBoundaryConditions(BCType bctype, float[,,] x)
     {
@@ -224,22 +193,22 @@ public class StableFluidSolver3D : MonoBehaviour
         int kBCfactor = 1;
         switch (bctype)
         {
-            case BCType.type1:
+            case BCType.vertical:
                 iBCfactor = -1;
                 jBCfactor = -1;
                 kBCfactor = 1;
                 break;
-            case BCType.type2:
+            case BCType.horizontal:
                 iBCfactor = 1;
                 jBCfactor = -1;
                 kBCfactor = 1;
                 break;
-            case BCType.type3:
+            case BCType.depth:
                 iBCfactor = 1;
                 jBCfactor = 1;
                 kBCfactor = -1;
                 break;
-            case BCType.type0:
+            case BCType.pressure:
                 break;
         }
         //borders along the grid      
@@ -268,12 +237,12 @@ public class StableFluidSolver3D : MonoBehaviour
             }
         }
         //special case for corners
-        //TOP FACE
+        //BOTTOM FACE
         x[0, 0, 0] = (x[1, 0, 0] + x[0, 1, 0] + x[0, 0, 1]) / 3f; //BL corner
         x[0, N - 1, 0] = (x[1, N - 1, 0] + x[0, N - 2, 0] + x[0, N - 1, 1]) / 3f; //BR corner
         x[0, N - 1, N-1] = (x[1, N - 1, N-1] + x[0, N - 2, N-1] + x[0, N - 1, N-2]) / 3f; //TR corner
         x[0, 0, N-1] = (x[1, 0, N-1] + x[0, 1, N-1] + x[0, 0, N-2]) / 3f; //TL corner
-        //BOTTOM FACE
+        //TOP FACE
         x[N - 1, 0, 0] = (x[N - 2, 0, 0] + x[N - 1, 1, 0] + x[N - 1, 0, 1]) / 3f; //BL corner
         x[N - 1, N - 1, 0] = (x[N - 2, N - 1, 0] + x[N - 1, N - 2, 0] + x[N - 1, N - 1, 1]) / 3f; //BR corner
         x[N - 1, N - 1, N-1] = (x[N - 2, N - 1, N-1] + x[N - 1, N - 2, N-1] + x[N - 1, N - 1, N-2]) / 3f; //TR corner
@@ -294,51 +263,7 @@ public class StableFluidSolver3D : MonoBehaviour
             }
         }
     }
-    #endregion
-
-    //NUMERICAL METHODS
-
-    #region numericalMethods
-
-    float centralDifferences(float[,,] x, int i, int j, int k, int direction, float dx)
-    {
-        if (direction == 0)
-            return (x[i + 1, j,k] - x[i - 1, j,k]) / (2f * dx);
-        else if(direction ==1)
-            return (x[i, j + 1,k] - x[i, j - 1,k]) / (2f * dx);
-        else
-            return (x[i, j, k+1] - x[i, j - 1, k-1]) / (2f * dx);
-    }
-
-    void GaussSeidelRelaxLinearSolver(float[,,] x, float[,,] x0, float leftHand, float rightHand, int limitStep = 16)
-    {
-        for (int step = 0; step < limitStep; step++)
-        {
-            for (int k = 1; k < N - 1; k++)
-            {
-                for (int i = 1; i < N - 1; i++)
-                {
-                    for (int j = 1; j < N - 1; j++)
-                    {
-                        //linear combination of "cross" neighbours
-                        x[i, j, k] = (x0[i, j, k] + leftHand * (x[i + 1, j, k]
-                                                       + x[i - 1, j, k]
-                                                       + x[i, j + 1, k]
-                                                       + x[i, j - 1, k]
-                                                       + x[i, j, k + 1]
-                                                       + x[i, j, k - 1])) / (float)rightHand;
-                    }
-                }
-            }
-        }
-    }
-
-    float discreteVelocityDivergence(float[,,] Ux, float[,,] Uy, float[,,] Uz, int i, int j, int k)
-    {
-        return (centralDifferences(Ux, i, j,k, 0, N) + centralDifferences(Uy, i, j,k, 1, N)) + centralDifferences(Uz,i,j,k,2,N);
-    }
-
-    #endregion
+    #endregion    
 
     // USER CONTROL METHODS
 
@@ -370,19 +295,6 @@ public class StableFluidSolver3D : MonoBehaviour
         this.velX[i, j, k] += amountX;
         this.velY[i, j, k] += amountY;
         this.velZ[i, j, k] += amountZ;
-    }
-
-    void debugDens()
-    {
-        float[,] d = new float[N, N];
-        for (int i = 1; i < N - 1; i++)
-        {
-            for (int j = 1; j < N - 1; j++)
-            {
-                d[i, j] = dens[i, j, 10];
-            }
-        }
-        renderer.renderScalarField(ref d);
     }
     #endregion
 }

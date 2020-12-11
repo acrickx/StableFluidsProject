@@ -131,7 +131,6 @@ GameObject:
   m_Component:
   - component: {fileID: 138213835}
   - component: {fileID: 138213834}
-  - component: {fileID: 138213837}
   m_Layer: 0
   m_Name: StableFluidProcessor
   m_TagString: Untagged
@@ -148,17 +147,20 @@ MonoBehaviour:
   m_GameObject: {fileID: 138213833}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 14ac71123298651419012277a34fd5dc, type: 3}
+  m_Script: {fileID: 11500000, guid: 8824414dec590024f920b422af2e15ba, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   StartSimulation: 0
-  renderer: {fileID: 138213837}
-  N: 32
-  dt: 0.1
+  image: {fileID: 1655288846}
+  originalTexture: {fileID: 2800000, guid: de66a2c2b3f82d340b58116da07a7038, type: 3}
+  N: 319
+  dt: 0.01
   dissipationRate: 0.2
-  diffusionRate: 0.00001
-  viscosity: 0.00001
-  mouseSpeedFactor: 1
+  diffusionRate: 0
+  viscosity: 0.001
+  BL: {fileID: 1059748249}
+  cam: {fileID: 208586518}
+  mouseSpeedFactor: 100
 --- !u!4 &138213835
 Transform:
   m_ObjectHideFlags: 0
@@ -173,23 +175,6 @@ Transform:
   m_Father: {fileID: 0}
   m_RootOrder: 4
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &138213837
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 138213833}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1aff73f04af87e048a11dcaf9929e3f4, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  resolution: 32
-  renderImage: {fileID: 1655288846}
-  BL: {fileID: 1059748249}
-  cam: {fileID: 208586518}
-  currentZ: 10
 --- !u!1 &208586517
 GameObject:
   m_ObjectHideFlags: 0
@@ -218,7 +203,7 @@ Camera:
   m_Enabled: 1
   serializedVersion: 2
   m_ClearFlags: 2
-  m_BackGroundColor: {r: 0.14119795, g: 0.15599413, b: 0.1792453, a: 0}
+  m_BackGroundColor: {r: 0.09433961, g: 0.08410465, b: 0.08410465, a: 0}
   m_projectionMatrixMode: 1
   m_GateFitMode: 2
   m_FOVAxisMode: 0
@@ -440,7 +425,7 @@ RectTransform:
   m_GameObject: {fileID: 1655288844}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 12, y: 12, z: 2}
+  m_LocalScale: {x: 1.5, y: 1.5, z: 2}
   m_Children:
   - {fileID: 1059748248}
   m_Father: {fileID: 1851756050}
@@ -448,8 +433,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 32, y: 32}
+  m_AnchoredPosition: {x: 10, y: 0}
+  m_SizeDelta: {x: 319, y: 319}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1655288846
 MonoBehaviour:
@@ -469,7 +454,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Texture: {fileID: 2800000, guid: 8c0b8b1821821ab40a05006b06604518, type: 3}
+  m_Texture: {fileID: 2800000, guid: de66a2c2b3f82d340b58116da07a7038, type: 3}
   m_UVRect:
     serializedVersion: 2
     x: 0
@@ -497,27 +482,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Delegates:
-  - eventID: 4
-    callback:
-      m_PersistentCalls:
-        m_Calls:
-        - m_Target: {fileID: 138213834}
-          m_MethodName: addDensitySource
-          m_Mode: 1
-          m_Arguments:
-            m_ObjectArgument: {fileID: 0}
-            m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-            m_IntArgument: 0
-            m_FloatArgument: 0
-            m_StringArgument: 
-            m_BoolArgument: 0
-          m_CallState: 2
   - eventID: 5
     callback:
       m_PersistentCalls:
         m_Calls:
         - m_Target: {fileID: 138213834}
-          m_MethodName: addVelocitySource
+          m_MethodName: addForce
           m_Mode: 1
           m_Arguments:
             m_ObjectArgument: {fileID: 0}
@@ -631,6 +601,7 @@ GameObject:
   - component: {fileID: 1851756049}
   - component: {fileID: 1851756048}
   - component: {fileID: 1851756047}
+  - component: {fileID: 1851756051}
   m_Layer: 5
   m_Name: Rendering
   m_TagString: Untagged
@@ -718,3 +689,20 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0, y: 0}
+--- !u!114 &1851756051
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1851756046}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1aff73f04af87e048a11dcaf9929e3f4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  resolution: 319
+  renderImage: {fileID: 1655288846}
+  BL: {fileID: 1059748249}
+  cam: {fileID: 208586518}
+  currentZ: 0

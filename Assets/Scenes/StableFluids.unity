@@ -168,10 +168,12 @@ MonoBehaviour:
   renderer: {fileID: 1851756051}
   N: 128
   dt: 0.01
-  dissipationRate: 0.2
-  diffusionRate: 0.00001
+  technique: 0
+  solver: 1
+  dissipation: 0.2
+  diffusion: 0.01
   viscosity: 0.00001
-  mouseSpeedFactor: 1
+  mouseSpeedFactor: 200
 --- !u!1 &208586517
 GameObject:
   m_ObjectHideFlags: 0
@@ -422,7 +424,7 @@ RectTransform:
   m_GameObject: {fileID: 1655288844}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 6, y: 6, z: 2}
+  m_LocalScale: {x: 5, y: 5, z: 2}
   m_Children:
   - {fileID: 1059748248}
   m_Father: {fileID: 1851756050}
@@ -499,7 +501,7 @@ MonoBehaviour:
       m_PersistentCalls:
         m_Calls:
         - m_Target: {fileID: 138213836}
-          m_MethodName: addVelocitySource
+          m_MethodName: addForce
           m_Mode: 1
           m_Arguments:
             m_ObjectArgument: {fileID: 0}

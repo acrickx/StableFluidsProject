@@ -1,8 +1,9 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 
-public class StableFluidSolver : MonoBehaviour
+public class LiquidTextureAnimator : MonoBehaviour
 {
     enum BCType
     {
@@ -11,53 +12,46 @@ public class StableFluidSolver : MonoBehaviour
         pressure
     }
 
-    enum advectionTechnique
-    {
-        FE,
-        RK2,
-        RK3
-    }
-
-    enum linearSolver
-    {
-        Jacobi,
-        GaussSeidel
-    }
-
     //SIMULATION PARAMETERS
     [SerializeField]
     bool StartSimulation = false;
     //renderer
     [SerializeField]
-    FluidRenderer renderer;
+    RawImage image;
+    [SerializeField]
+    Texture2D originalTexture;
 
     //SOLVER PARAMETERS
     [SerializeField]
-    int N = 128;
-    float dx =0;
+    int N = 512;
+    float dx = 0;
     [SerializeField]
     float dt = 0.2f;
     float timer = 0;
-    [SerializeField]
-    advectionTechnique technique;
-    [SerializeField]
-    linearSolver solver;
 
     //FLUID PARAMETERS
     [SerializeField]
-    float dissipation = 0.2f;
+    float dissipationRate = 0.2f;
     [SerializeField]
-    float diffusion = 0f;
+    float diffusionRate = 0f;
     [SerializeField]
     float viscosity = 0.000001f;
 
+    //RENDERING
+    [SerializeField]
+    private Image BL;
+    [SerializeField]
+    private Camera cam;
+
     //2D arrays for veloctiy and dens
-    float[,] dens;
-    float[,] densPrev;
-    float[,] velX;
-    float[,] velXPrev;
+    float[,] xCoord;
+    float[,] xCoordPrev;
+    float[,] yCoord;
+    float[,] yCoordPrev;
     float[,] velY;
     float[,] velYPrev;
+    float[,] velX;
+    float[,] velXPrev;
 
     //handling mouse input
     Vector2 lastMousePoint;
@@ -71,8 +65,20 @@ public class StableFluidSolver : MonoBehaviour
     private void Start()
     {
         //2D arrays for veloctiy and dens
-        dens = new float[N, N];
-        densPrev = new float[N, N];
+        xCoord = new float[N, N];
+        xCoordPrev = new float[N, N];
+        yCoord = new float[N, N];
+        yCoordPrev = new float[N, N];
+        for (int i = 0; i < N; i++)
+        {
+            for (int j = 0; j < N; j++)
+            {
+                xCoord[i, j] = i / (float)N;
+                yCoord[i, j] = j / (float)N;
+            }
+        }
+        renderLiquidTexture();
+
         velX = new float[N, N];
         velXPrev = new float[N, N];
         velY = new float[N, N];
@@ -89,71 +95,31 @@ public class StableFluidSolver : MonoBehaviour
 
     void Vstep()
     {
-        //difusion step
-        diffusionStep(velXPrev, velX, viscosity); 
+        diffusionStep(velXPrev, velX, viscosity);
         setBoundaryConditions(BCType.horizontal, velX);
-
-        diffusionStep(velYPrev, velY, viscosity); 
+        diffusionStep(velYPrev, velY, viscosity);
         setBoundaryConditions(BCType.vertical, velY);
-        
-        //projection step -> keep divergence-free velocity
-        projectionStep(velXPrev, velYPrev, velX, velY);
-        setBoundaryConditions(BCType.vertical, velY);
+        //projection step
+        projectionStep(velXPrev, velYPrev, velY, velX);
+        //Advection step
+        advectionStepFE(velX, velXPrev, velYPrev, velXPrev);
         setBoundaryConditions(BCType.horizontal, velX);
-
-        //self-advection step -> different numerical techniques        
-        if (technique == advectionTechnique.RK3)
-        {
-            advectionStepRK3(velX, velXPrev, velXPrev, velYPrev);
-            setBoundaryConditions(BCType.horizontal, velX);            
-
-            advectionStepRK3(velY, velYPrev, velXPrev, velYPrev);
-            setBoundaryConditions(BCType.vertical, velY);            
-        }
-        else if (technique == advectionTechnique.RK2)
-        {
-            advectionStepRK2(velX, velXPrev, velXPrev, velYPrev);
-            setBoundaryConditions(BCType.horizontal, velX);
-
-            advectionStepRK2(velY, velYPrev, velXPrev, velYPrev);
-            setBoundaryConditions(BCType.vertical, velY);            
-        }
-        else
-        {
-            advectionStepFE(velX, velXPrev, velXPrev, velYPrev);
-            setBoundaryConditions(BCType.horizontal, velX);
-
-            advectionStepFE(velY, velYPrev, velXPrev, velYPrev);
-            setBoundaryConditions(BCType.vertical, velY);            
-        }
-
-        //projection step -> keep divergence-free velocity
-        projectionStep(velX, velY, velXPrev, velYPrev);
-        setBoundaryConditions(BCType.horizontal, velY);
-        setBoundaryConditions(BCType.vertical, velX);
+        advectionStepFE(velY, velYPrev, velYPrev, velXPrev);
+        setBoundaryConditions(BCType.vertical, velY);
+        //projection step -> solving Poisson equation
+        projectionStep(velY, velX, velYPrev, velXPrev);
     }
 
     void Sstep()
     {
         //diffusion step
-        diffusionStep(densPrev, dens, diffusion);
-
+        diffusionStep(xCoordPrev, xCoord, diffusionRate);
+        diffusionStep(yCoordPrev, yCoord, diffusionRate);
         //advection step
-        if (technique == advectionTechnique.FE)
-        {
-            advectionStepFE(dens, densPrev, velX, velY);
-        }
-        else if (technique == advectionTechnique.RK2)
-        {
-            advectionStepRK2(dens, densPrev, velX, velY);
-        }
-        else
-        {
-            advectionStepRK3(dens, densPrev, velX, velY);         
-        }
-
-        //dissipation step
-        dissipate(dens);
+        advectionStepFE(xCoord, xCoordPrev, velY, velX);
+        advectionStepFE(yCoord, yCoordPrev, velY, velX);
+        setBoundaryConditions(BCType.pressure, xCoord);
+        setBoundaryConditions(BCType.pressure, yCoord);
     }
 
     private void Update()
@@ -166,21 +132,11 @@ public class StableFluidSolver : MonoBehaviour
                 Vstep();
                 Sstep();
                 timer -= dt;
-                renderer.renderScalarField(ref dens);
+                renderLiquidTexture();
             }
         }
         mouseSpeed = new Vector2(Input.mousePosition.x, Input.mousePosition.y) - lastMousePoint;
         lastMousePoint = Input.mousePosition;
-
-        if (Input.GetKeyDown(KeyCode.V))
-        {
-            debugVelocities();
-        }
-
-        if (Input.GetKeyDown(KeyCode.Escape))
-        {
-            clearVelocities();
-        }
         print("FPS : " + 1 / Time.deltaTime);
     }
 
@@ -192,15 +148,8 @@ public class StableFluidSolver : MonoBehaviour
 
     void diffusionStep(float[,] x, float[,] x0, float diffusion)
     {
-        float diffusionRate = dt * diffusion / (dx*dx);
-        if (solver == linearSolver.Jacobi)
-        {
-            NumericalMethods.JacobiLinearSolver(x, x0, diffusionRate, 1 + 4 * diffusionRate, N);
-        }
-        else
-        {
-            NumericalMethods.GaussSeidelRelaxLinearSolver(x, x0, diffusionRate, 1 + 4 * diffusionRate, N);
-        }
+        float diffusionRate = dt * diffusion / (dx * dx);
+        NumericalMethods.GaussSeidelRelaxLinearSolver(x, x0, diffusionRate, 1 + 4 * diffusionRate, N);        
     }
 
     void projectionStep(float[,] Ux, float[,] Uy, float[,] pressure, float[,] div)
@@ -212,7 +161,7 @@ public class StableFluidSolver : MonoBehaviour
             {
                 //computing divergence which will be the right hand of the equation for pressure linear system
                 //(-1*dx*dx) because we isolate pressure[i,j] in the equation for the solver
-                div[i, j] = NumericalMethods.divergence(Ux, Uy, i, j,N) * (-dx*dx);
+                div[i, j] = NumericalMethods.divergence(Ux, Uy, i, j, N) * (-dx * dx);
                 //setting initial to pressure for linear solve
                 pressure[i, j] = 0;
             }
@@ -220,14 +169,7 @@ public class StableFluidSolver : MonoBehaviour
         //reset bondary conditions since we made changes in the grid
         setBoundaryConditions(BCType.pressure, div); setBoundaryConditions(BCType.pressure, pressure);
         //solve Poisson equation using linear solver to find correct pressure values
-        if (solver == linearSolver.Jacobi)
-        {
-            NumericalMethods.JacobiLinearSolver(pressure, div, 1, 4, N);
-        }
-        else
-        {
-            NumericalMethods.GaussSeidelRelaxLinearSolver(pressure, div, 1, 4, N);
-        }
+        NumericalMethods.GaussSeidelRelaxLinearSolver(pressure, div, 1, 4, N);        
         //subtract pressure gradient
         project(Ux, Uy, pressure);
     }
@@ -254,9 +196,9 @@ public class StableFluidSolver : MonoBehaviour
             for (int j = 1; j < N - 1; j++)
             {
                 //trace "imaginary" particle from the grid position back in time to previous position
-                Vector2 prevParticlePos = NumericalMethods.TraceParticleFE(i, j, Ux, Uy,dt,N);                
+                Vector2 prevParticlePos = NumericalMethods.TraceParticleFE(i, j, Ux, Uy, dt, N);
                 //interpolate from adjacent nodes the scalar field value and set it in s
-                s[i, j] = NumericalMethods.bilinearInterpolation(s0, prevParticlePos,N);                
+                s[i, j] = NumericalMethods.bilinearInterpolation(s0, prevParticlePos, N);
             }
         }
     }
@@ -311,7 +253,7 @@ public class StableFluidSolver : MonoBehaviour
             //borders along the grid
             x[i, 0] = iBCfactor * x[i, 1]; // LEFT ROW 
             x[N - 1, i] = jBCfactor * x[N - 2, i]; // TOP ROW
-            x[i, N - 1] = iBCfactor * x[i, N-2]; // RIGHT ROW           
+            x[i, N - 1] = iBCfactor * x[i, N - 2]; // RIGHT ROW           
             x[0, i] = jBCfactor * x[1, i]; // BOTTOM ROW
         }
         //special case for corners
@@ -321,72 +263,53 @@ public class StableFluidSolver : MonoBehaviour
         x[0, N - 1] = (x[1, N - 1] + x[0, N - 2]) / 2f; //BR corner
     }
 
-    void dissipate(float[,] s)
-    {
-        for (int i = 0; i < N; i++)
-        {
-            for (int j = 0; j < N; j++)
-            {
-                s[i, j] *= (1 / (1 + dt * dissipation));
-            }
-        }
-    }
     #endregion
-
     // USER CONTROL METHODS
 
     #region userControls
 
-    public void addDensitySource()
-    {
-        Vector2Int mousePos = renderer.getMousePosOnGrid();
-        addDensity(mousePos.x, mousePos.y, 50);
-    }
-
     public void addForce()
     {
-        Vector2Int mousePos = renderer.getMousePosOnGrid();
+        Vector2Int mousePos = getMousePosOnGrid();
         if (mousePos.x > 0 && mousePos.x < N && mousePos.y > 0 && mousePos.y < N)
-        {
-            addDensity(mousePos.x, mousePos.y, 10);
+        {            
             addVelocity(mousePos.x, mousePos.y, mouseSpeed.y * mouseSpeedFactor, mouseSpeed.x * mouseSpeedFactor);
         }
-    }
-    void addDensity(int x, int y, float amount)
-    {
-        dens[x, y] += amount;
     }
 
     void addVelocity(int x, int y, float amountX, float amountY)
     {
-        this.velY[x, y] += amountX;
-        this.velX[x, y] += amountY;
+        this.velX[x, y] += amountX;
+        this.velY[x, y] += amountY;
     }
 
-    void debugVelocities()
+    public Vector3 getWorldPosFromGrid(float i, float j)
     {
-        for (int i = 1; i < N - 1; i++)
+        return cam.ScreenToWorldPoint(cam.WorldToScreenPoint(BL.transform.position) + new Vector3(i * image.transform.localScale.x, j * image.transform.localScale.y, 0));
+    }
+
+    void renderLiquidTexture()
+    {
+        Texture2D updatedTexture = new Texture2D(N, N);
+        for (int i = 0; i < N; i++)
         {
-            for (int j = 1; j < N - 1; j++)
+            for (int j = 0; j < N; j++)
             {
-                Vector3 initialPoint = renderer.getWorldPosFromGrid(i, j);
-                Vector3 vel = initialPoint + new Vector3(1, 1, 0);
-                GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                cube.transform.position = initialPoint + new Vector3(transform.localScale.x, transform.localScale.y, 0) * 0.5f;
-                cube.transform.rotation = Quaternion.LookRotation(new Vector3(velY[i, j], velX[i, j], 0));
-                cube.transform.localScale = new Vector3(0.3f, 1.5f, 0.3f);
-                cube.GetComponent<Renderer>().material.color = Color.red;
-                cube.transform.parent = debugVelocity.transform;
+                updatedTexture.SetPixel(i, j, originalTexture.GetPixel(Mathf.RoundToInt(xCoord[i, j] * N), Mathf.RoundToInt(yCoord[i, j] * N)));
             }
         }
+        updatedTexture.Apply();
+        image.texture = updatedTexture;
     }
 
-    void clearVelocities()
+    public Vector2Int getMousePosOnGrid()
     {
-        for (int i = 0; i < debugVelocity.transform.childCount; i++)
-        {
-            GameObject.Destroy(debugVelocity.transform.GetChild(i).gameObject);
-        }
+        float minX, minY;
+        minX = cam.WorldToScreenPoint(BL.transform.position).x;
+        minY = cam.WorldToScreenPoint(BL.transform.position).y;
+        Vector2Int pos = new Vector2Int(Mathf.RoundToInt((Input.mousePosition.x - minX) / image.transform.localScale.x), Mathf.RoundToInt((Input.mousePosition.y - minY) / image.transform.localScale.y));
+        return pos;
     }
+
     #endregion
 }
